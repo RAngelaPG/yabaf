@@ -1,0 +1,109 @@
+##' @title ACBD Example Data Set
+##' @name wheat
+##' @description Augmented complete block design example data set. Reproducible results.
+##'     Check data and outputs.
+##' @format data frame with six columns: row, column, block, treat, role and response
+##' @usage data(wheat)
+##' @rdname wheat
+##' @docType data
+##' @importFrom Rdpack reprompt
+NULL
+
+##' @title Concrete interface for ACBD designs
+##' @description Specialized Concrete Definition.
+##' @name ACBDStats-class
+##' @exportClass ACBDStats
+##' @seealso [Breeder() and SplitPlot()] for the pure virtual and concrete
+##'     abstract template.
+##' @field report list or analytical summary.
+##' @import methods asreml
+##' @examples
+##' data(wheat, package = "yabaf")
+##' b <- Breeder(wheat)
+##' a <- ACBDStats(b)
+##' a$report$h2
+##' @export ACBDStats
+ACBDStats <- setRefClass(
+    Class = "ACBDStats",
+    contains = "Breeder",
+    fields = c("report" = "list"),
+    methods = list(
+        initialize = function(d) {
+            if(inherits(d, "Breeder")) {
+                .self$data <- d$data
+                .self$log <- d$log
+
+                if (!is.factor(.self$data$row))
+                    .self$data$row <- factor(.self$data$row)
+
+                if (!is.factor(.self$data$column))
+                    .self$data$column <- factor(.self$data$column)
+
+                if (!is.factor(.self$data$role))
+                    .self$data$role <- factor(.self$data$role)
+
+                if (!is.factor(.self$data$block))
+                    .self$data$block <- factor(.self$data$block)
+
+                if (!is.factor(.self$data$treat))
+                    .self$data$treat <- factor(.self$data$treat)
+
+                .self$report <- .self$analyze()
+            }
+        },
+        analyze = function() {
+            asreml::asreml.options(maxit = 100, workspace = 3E8, pworkspace = 1E8, trace = FALSE)
+            fit <- asreml::asreml(response ~ role + at(role, "check"):treat,
+                                  random = ~ block + at(role, "test"):treat,
+                                  residual = ~ ar1(row):ar1(column),
+                                  data = .self$data)
+            vc <- as.data.frame(summary(fit)$varcomp)
+            tests <- subset(predict(fit, classify = "role:treat", levels = list(role = "test"))$pvals,
+                            !(treat %in% as.character(checks$treat)) & status == "Estimable", select = -status)
+            checks <- subset(predict(fit, classify = "role:treat", levels = list(role = "check"))$pvals,
+                             status == "Estimable", select = -status)
+            ct <- rbind(checks, tests)
+            stdError <- subset(predict(fit, classify = "role:treat", levels = list(role = "test"))$std.error,
+                               !(treat %in% as.character(checks$treat)) & status == "Estimable", select = -status)
+            
+            Vg <- var(tests) + ((stdError^2)/length(stdError))
+            
+            h2<-vc$component["at(role, 'test'):treat"]/(vc$component["at(role, 'test'):treat"]+vc$component["row:column!R"])
+            reliability <- mean(abs((Vg - (stdError^2)) / Vg))
+            mean_designation<-mean(ct,na.rm=T)
+            cv_designation<-100*(sd(ct,na.rm=T)/mean(ct,na.rm=T))
+            cv_environment<-100*(sqrt(vc$component["row:column!R"])/mean(.self$data$response,na.rm=T))
+            lsdt <- qt(1 - 0.05 / 2, round(fit$nedf)) * predict(fit, classify = "role:treat", levels = list(role = "test"))$avsed
+            
+            .self$appendLog(event = "report")
+            .self$report <-  list("h2"=h2,
+                                  "cv_des" = cv_designation,
+                                  "reliability" = reliability,
+                                  "varcomp"= vc,
+                                  "mean_des" = mean_designation,
+                                  "cv_env" = cv_environment,
+                                  "lsd" = lsdt,
+                                  "blups" = ct)
+        },
+        asList = function() {
+            return(list(data = .self$data, report = .self$report, log = .self$log))
+        }
+    )
+)
+
+setValidity(
+    Class = "ACBDStats",
+    method = function(object) {
+        if (all(c("role", "row", "column", "block", "treat", "response") %in% names(object$data))) {
+            TRUE
+        } else {
+            "ACBD must contain role, row, column, block, treat and response data"
+        }
+        if (all(levels(object$data$role) %in% c("check", "test"))) {
+            TRUE
+        } else {
+            "ACBD must contain check and test as levels of role"
+        }
+    }
+)
+
