@@ -58,22 +58,21 @@ ACBDStats <- setRefClass(
                                   residual = ~ ar1(row):ar1(column),
                                   data = .self$data)
             vc <- as.data.frame(summary(fit)$varcomp)
-            tests <- subset(predict(fit, classify = "role:treat", levels = list(role = "test"))$pvals,
-                            !(treat %in% as.character(checks$treat)) & status == "Estimable", select = -status)
             checks <- subset(predict(fit, classify = "role:treat", levels = list(role = "check"))$pvals,
-                             status == "Estimable", select = -status)
+                 status == "Estimable", select = -status)
+            tests <- subset(predict(fit, classify = "role:treat", levels = list(role = "test"))$pvals,
+                !(treat %in% as.character(checks$treat)) & status == "Estimable", select = -status)
             ct <- rbind(checks, tests)
-            stdError <- subset(predict(fit, classify = "role:treat", levels = list(role = "test"))$std.error,
-                               !(treat %in% as.character(checks$treat)) & status == "Estimable", select = -status)
-            
-            Vg <- var(tests) + ((stdError^2)/length(stdError))
-            
-            h2<-vc$component["at(role, 'test'):treat"]/(vc$component["at(role, 'test'):treat"]+vc$component["row:column!R"])
+            stdError <- tests$std.error
+
+            Vg <- var(tests$predicted.value) + ((stdError^2)/length(stdError))
+
+            h2<-vc["at(role, 'test'):treat","component"]/(vc["at(role, 'test'):treat","component"]+vc["row:column!R","component"])
             reliability <- mean(abs((Vg - (stdError^2)) / Vg))
-            mean_designation<-mean(ct,na.rm=T)
-            cv_designation<-100*(sd(ct,na.rm=T)/mean(ct,na.rm=T))
-            cv_environment<-100*(sqrt(vc$component["row:column!R"])/mean(.self$data$response,na.rm=T))
-            lsdt <- qt(1 - 0.05 / 2, round(fit$nedf)) * predict(fit, classify = "role:treat", levels = list(role = "test"))$avsed
+            mean_designation<-mean(ct$predicted.value,na.rm=T)
+            cv_designation<-100*(sd(ct$predicted.value,na.rm=T)/mean(ct$predicted.value,na.rm=T))
+            cv_environment<-100*(sqrt(vc["row:column!R","component"])/mean(.self$data$response,na.rm=T))
+            lsdt <- as.numeric(qt(1 - 0.05 / 2, round(fit$nedf)) * predict(fit, classify = "role:treat", levels = list(role = "test"))$avsed)
             
             .self$appendLog(event = "report")
             .self$report <-  list("h2"=h2,
