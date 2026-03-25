@@ -24,6 +24,6 @@ RdMacros: Rdpack
 License: GPL-3 | file LICENSE
 Encoding: UTF-8
 NeedsCompilation: no
-Collate: 'Package.R' 'Interface.R' 'RCBD.R' 'Lattice.R' 'ACBD.R' 'Pedigree.R'
+Collate: 'Package.R' 'Interface.R' 'RCBD.R' 'Lattice.R' 'ACBD.R' 'Pedigree.R' 'ACBDStats.R'
 RoxygenNote: 7.3.2
 Config/testthat/edition: 3
